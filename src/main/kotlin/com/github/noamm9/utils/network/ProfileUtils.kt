@@ -10,6 +10,7 @@ import com.github.noamm9.utils.location.LocationUtils
 import com.github.noamm9.utils.network.cache.*
 import com.github.noamm9.utils.network.data.DungeonStats
 import com.github.noamm9.utils.network.data.MojangData
+import com.github.noamm9.websocket.WebSocket
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.jsonObject
 import java.util.*
@@ -32,7 +33,7 @@ object ProfileUtils {
 
     suspend fun getUUIDbyName(name: String): Result<MojangData> {
         val key = name.lowercase()
-        MojangCache.check(key, "$name not found")?.let { return it }
+        MojangCache.check(key)?.let { return it }
 
         for (api in nameToUuidApis) {
             if (System.currentTimeMillis() < (apiCooldowns[api] ?: 0L)) continue
@@ -63,7 +64,7 @@ object ProfileUtils {
 
     suspend fun getNameByUUID(uuid: UUID): Result<MojangData> {
         val key = uuid.toString().replace("-", "")
-        MojangCache.check(key, "UUID not found")?.let { return it }
+        MojangCache.check(key)?.let { return it }
 
         for (api in uuidToNameApis) {
             if (System.currentTimeMillis() < (apiCooldowns[api] ?: 0L)) continue
@@ -126,9 +127,9 @@ object ProfileUtils {
         }
     }
 
-    // usuaslly i dont like running commands in the background
-    // but this one seems to behave exacly like /locraw.
-    // meaning it does not effect the message spam cooldown
+    // usually I don't like running commands in the background
+    // but this one seems to behave exactly like /locraw.
+    // meaning it does not affect the message spam cooldown
     private suspend fun getSecretsCMD(): Long {
         if (! LocationUtils.inSkyblock) error("Not in Skyblock")
         _totalSecrets = null
@@ -148,6 +149,7 @@ object ProfileUtils {
 
         if (event.unformattedText.substringBefore(":") != mc.user.name) return@listener
         _totalSecrets = event.unformattedText.substringAfter(": ").toLongOrNull()
+        WebSocket.send(mapOf("type" to "secretcount", "secrets" to _totalSecrets))
         ThreadUtils.scheduledTaskServer(5) { listener.unregister() }
     }
 }

@@ -3,14 +3,15 @@ package com.github.noamm9.config
 import com.github.noamm9.NoammAddons
 import com.github.noamm9.features.FeatureManager
 import com.github.noamm9.utils.*
-import com.github.noamm9.utils.GsonUtils.jsonArray
-import com.github.noamm9.utils.GsonUtils.jsonObject
+import com.github.noamm9.utils.GsonUtils.gsonArray
+import com.github.noamm9.utils.GsonUtils.gsonObject
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import net.fabricmc.loader.api.FabricLoader
 import java.io.File
 
 object ConfigManager {
+    private val configRegex = Regex("^[A-Za-z0-9_-]{1,32}$")
     private val configPath = FabricLoader.getInstance().configDir.resolve(NoammAddons.MOD_NAME)
     private val configsDir = configPath.resolve("configs").toFile()
     private val defaultConfigFile = File(configPath.toFile(), "config.json")
@@ -19,17 +20,29 @@ object ConfigManager {
     private const val VERSION = 1
 
     fun getConfigs(): Map<String, File> {
-        val named = configsDir.listFiles()?.associateBy { it.nameWithoutExtension } ?: emptyMap()
+        val named = configsDir.listFiles()
+            ?.filter { it.name.endsWith(".json") && configRegex.matches(it.nameWithoutExtension) }
+            ?.associateBy { it.nameWithoutExtension } ?: emptyMap()
         return named + ("default" to defaultConfigFile)
     }
 
     fun createConfig(configName: String): Boolean {
+        val newFile = run {
+            if (! configRegex.matches(configName)) return@run null
+            val file = File(configsDir, "$configName.json").canonicalFile
+            if (file.parentFile != configsDir.canonicalFile) return@run null
+            return@run file
+        } ?: run {
+            ChatUtils.modMessage("&cInvalid config name \"$configName\". Use 1-32 characters: A-Z, 0-9, _ or -.")
+            return false
+        }
+
         if (configName in getConfigs().keys) {
             ChatUtils.modMessage("&cThere is already a config named \"$configName\".")
             return false
         }
+
         configsDir.mkdirs()
-        val newFile = File(configsDir, "$configName.json")
         configFile.file.copyTo(newFile)
         configFile = FileHandler(newFile)
         selectedConfig.set(configName)
@@ -38,6 +51,7 @@ object ConfigManager {
     }
 
     fun changeConfig(configName: String) {
+        if (! configRegex.matches(configName)) return ChatUtils.modMessage("&cInvalid config name \"$configName\".")
         val newConfigFile = getConfigs()[configName] ?: return ChatUtils.modMessage("&cNo config named \"$configName\" was found.")
         if (! newConfigFile.exists()) return ChatUtils.modMessage("&cNo config file found for \"$configName\".")
         configFile = FileHandler(newConfigFile)
@@ -51,10 +65,17 @@ object ConfigManager {
             ChatUtils.modMessage("&cYou cannot delete the default config.")
             return false
         }
+
+        if (! configRegex.matches(configName)) {
+            ChatUtils.modMessage("&cInvalid config name \"$configName\".")
+            return false
+        }
+
         val file = getConfigs()[configName] ?: run {
             ChatUtils.modMessage("&cNo config found with the name \"$configName\".")
             return false
         }
+
         file.delete()
         ChatUtils.modMessage("&aSuccessfully deleted the config \"$configName\".")
         if (configName == selectedConfig.get()) changeConfig("default")
@@ -77,13 +98,13 @@ object ConfigManager {
         read(migrated)
     }
 
-    fun save() = configFile.write(GsonUtils.gson.toJson(jsonObject {
+    fun save() = configFile.write(GsonUtils.gson.toJson(gsonObject {
         addProperty("version", VERSION)
-        add("config", jsonArray {
-            for (feature in FeatureManager.features) add(jsonObject {
+        add("config", gsonArray {
+            for (feature in FeatureManager.features) add(gsonObject {
                 addProperty("name", feature.jsonName)
                 addProperty("enabled", feature.enabled)
-                add("configSettings", jsonObject {
+                add("configSettings", gsonObject {
                     for (setting in feature.configSettings) {
                         if (setting !is Savable) continue
                         add(setting.jsonName, setting.write())
@@ -91,8 +112,8 @@ object ConfigManager {
                 })
             })
         })
-        add("hud", jsonArray {
-            for (hud in FeatureManager.hudElements) add(jsonObject {
+        add("hud", gsonArray {
+            for (hud in FeatureManager.hudElements) add(gsonObject {
                 addProperty("name", hud.name)
                 addProperty("x", hud.x)
                 addProperty("y", hud.y)

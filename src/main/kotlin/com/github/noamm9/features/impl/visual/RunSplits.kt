@@ -12,7 +12,6 @@ import com.github.noamm9.utils.dungeons.map.handlers.DungeonScanner
 import com.github.noamm9.utils.location.LocationUtils
 import com.github.noamm9.utils.render.Render2D.drawString
 import com.github.noamm9.utils.render.RenderHelper.width
-import java.util.concurrent.*
 
 object RunSplits: Feature("A Splits HUD for Dungeons.") {
     private val showWitherDoors by ToggleSetting("Show Wither Doors").withDescription("Show The Number of Wither Doors in the run")
@@ -22,7 +21,7 @@ object RunSplits: Feature("A Splits HUD for Dungeons.") {
 
     private val floorSplits = DataDownloader.loadJson<Map<String, List<DialogueEntry>>>("runSplits.json")
     private val runEndRegex = Regex("^\\s*☠ Defeated (.+) in 0?([\\dhms ]+?)\\s*(\\(NEW RECORD!\\))?$")
-    private val currentFloorSplits = ConcurrentHashMap<String, Split>()
+    private val currentFloorSplits = linkedMapOf<String, Split>()
 
     private var score300Timer: DualTime? = null
 
@@ -63,6 +62,7 @@ object RunSplits: Feature("A Splits HUD for Dungeons.") {
         register<WorldChangeEvent> {
             currentFloorSplits.clear()
             score300Timer = null
+            currentText = emptyList()
         }
 
         register<TickEvent.Start> {
@@ -163,8 +163,11 @@ object RunSplits: Feature("A Splits HUD for Dungeons.") {
 
     private data class Split(var start: DualTime? = null, var end: DualTime? = null)
     private data class DialogueEntry(val name: String, val start: String? = null, val end: String? = null) {
-        fun startMatches(msg: String) = start == msg || start?.toRegex()?.matches(msg) == true
-        fun endMatches(msg: String) = end == msg || end?.toRegex()?.matches(msg) == true
+        @Transient private val startRegex = start?.toRegex()
+        @Transient private val endRegex = end?.toRegex()
+
+        fun startMatches(msg: String) = start == msg || startRegex?.matches(msg) == true
+        fun endMatches(msg: String) = end == msg || endRegex?.matches(msg) == true
     }
 
     private fun dual(diff: DualTime, fmt: (Long) -> String) = "${fmt(diff.real / 50)} §7(§b${fmt(diff.ticks)}§7)"
